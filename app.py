@@ -12,7 +12,7 @@ if 'fonte_ativa' not in st.session_state:
 if 'arquivo_atual' not in st.session_state:
     st.session_state['arquivo_atual'] = None
 
-# --- 1. LÓGICA DE ANÁLISE ---
+# --- 1. LÓGICA DE ANÁLISE  ---
 def identificar_tom_avancado(caminho_arquivo, filtrar_graves=False):
     # Carrega o áudio
     y, sr = librosa.load(caminho_arquivo, sr=22050, duration=60)
@@ -22,20 +22,20 @@ def identificar_tom_avancado(caminho_arquivo, filtrar_graves=False):
     if len(y) < sr: return None
 
     # 2. FILTRO DE PALCO
-    fmin_val = librosa.note_to_hz('C2') # C2 = 65Hz (Padrão)
+    fmin_val = librosa.note_to_hz('C2')
     if filtrar_graves:
-        fmin_val = librosa.note_to_hz('C3') # C3 = 130Hz 
+        fmin_val = librosa.note_to_hz('C3') 
 
-    # 3. SEPARAÇÃO HARMÔNICA (Tira a percussão)
+    # 3. SEPARAÇÃO HARMÔNICA
     y_harmonic, _ = librosa.effects.hpss(y)
     
-    # 4. CHROMAGRAMA COM FILTRO DE FREQUÊNCIA
+    # 4. CHROMAGRAMA
     chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, fmin=fmin_val, n_octaves=5)
-    
     chroma_vals = np.sum(chroma, axis=1)
     
-    major_profile = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 5.0, 2.0, 3.5, 1.5, 4.0]
-    minor_profile = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 5.0, 3.5, 2.0, 1.5, 4.0]
+    # Perfil Temperley 
+    major_profile = np.array([5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 5.0, 2.0, 3.5, 1.5, 4.0])
+    minor_profile = np.array([5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 5.0, 3.5, 2.0, 1.5, 4.0])
     
     notas = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     correlacoes = []
@@ -68,17 +68,13 @@ def baixar_audio_youtube(url):
             }
         }
     }
-    
     try:
-        if os.path.exists("temp_yt.mp3"): 
-            os.remove("temp_yt.mp3")
-            
+        if os.path.exists("temp_yt.mp3"): os.remove("temp_yt.mp3")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             return "temp_yt.mp3"
-            
     except Exception as e:
-        st.error(f"Erro no download (YouTube bloqueou): {e}")
+        st.error(f"Erro no download: {e}")
         return None
 
 # --- 3. INTERFACE ---
@@ -88,42 +84,55 @@ modo_palco = st.checkbox("🎤 Modo Palco (Filtrar vazamento de som grave e bate
 
 tab1, tab2 = st.tabs(["YouTube", "Gravação/Arquivo"])
 
+# ABA 1: YouTube
 with tab1:
     url = st.text_input("Link do vídeo:")
     if st.button("Processar YouTube"):
         with st.spinner("Baixando..."):
             path = baixar_audio_youtube(url)
             if path:
-                # Atualiza o estado explicitamente
                 st.session_state['arquivo_atual'] = path
                 st.session_state['fonte_ativa'] = 'youtube'
-                st.rerun() # Recarrega a página para mostrar o resultado limpo
+                st.rerun()
 
+# ABA 2: Gravação e Upload 
 with tab2:
-    gravacao = st.audio_input("Gravar Voz")
-    uploaded = st.file_uploader("Upload MP3/WAV", type=['mp3','wav','ogg'])
+
+    col_rec, col_up = st.columns(2)
     
-    if gravacao:
-        with open("temp_rec.wav", "wb") as f:
-            f.write(gravacao.read())
-        
-        if st.button("Analisar Gravação"):
-            st.session_state['arquivo_atual'] = "temp_rec.wav"
-            st.session_state['fonte_ativa'] = 'rec'
-            st.rerun()
+    # --- Coluna 1: Gravação ---
+    with col_rec:
+        st.write("#### 🔴 Gravar")
+        gravacao = st.audio_input("Microfone")
+        if gravacao:
+            # Salva o arquivo sempre que houver gravação
+            with open("temp_rec.wav", "wb") as f:
+                f.write(gravacao.read())
+            
+            # Botão específico para analisar a gravação
+            if st.button("Analisar Gravação", use_container_width=True):
+                st.session_state['arquivo_atual'] = "temp_rec.wav"
+                st.session_state['fonte_ativa'] = 'GRAVAÇÃO' 
+                st.rerun()
 
-    elif uploaded:
-        with open("temp_up.mp3", "wb") as f:
-            f.write(uploaded.getbuffer())
-        if st.button("Analisar Arquivo"):
-            st.session_state['arquivo_atual'] = "temp_up.mp3"
-            st.session_state['fonte_ativa'] = 'upload'
-            st.rerun()
+    # --- Coluna 2: Upload ---
+    with col_up:
+        st.write("#### 📂 Upload")
+        uploaded = st.file_uploader("Arquivo", type=['mp3','wav','ogg'])
+        if uploaded:
+            with open("temp_up.mp3", "wb") as f:
+                f.write(uploaded.getbuffer())
+            
+            if st.button("Analisar Arquivo", use_container_width=True):
+                st.session_state['arquivo_atual'] = "temp_up.mp3"
+                st.session_state['fonte_ativa'] = 'UPLOAD' 
+                st.rerun()
 
+# --- EXIBIÇÃO DE RESULTADOS ---
 if st.session_state['arquivo_atual'] and os.path.exists(st.session_state['arquivo_atual']):
     
     st.divider()
-    st.write(f"📂 Fonte: **{st.session_state['fonte_ativa'].upper()}**")
+    st.caption(f"Fonte utilizada: {st.session_state['fonte_ativa']}")
     
     with st.spinner("Calculando harmonia..."):
         try:
@@ -145,8 +154,7 @@ if st.session_state['arquivo_atual'] and os.path.exists(st.session_state['arquiv
                 """, unsafe_allow_html=True)
 
                 if modo_palco:
-                    st.info("🎙️ Modo Palco Ativo: Frequências graves ignoradas para focar na voz.")
-                
+                    st.info("🎙️ Modo Palco Ativo.")
             else:
                 st.error("Áudio muito curto ou inválido.")
                 
