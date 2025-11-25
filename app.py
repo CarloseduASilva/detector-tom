@@ -12,7 +12,7 @@ if 'fonte_ativa' not in st.session_state:
 if 'arquivo_atual' not in st.session_state:
     st.session_state['arquivo_atual'] = None
 
-# --- 1. LÓGICA DE ANÁLISE (COM FILTRO DE PALCO) ---
+# --- 1. LÓGICA DE ANÁLISE ---
 def identificar_tom_avancado(caminho_arquivo, filtrar_graves=False):
     # Carrega o áudio
     y, sr = librosa.load(caminho_arquivo, sr=22050, duration=60)
@@ -34,9 +34,8 @@ def identificar_tom_avancado(caminho_arquivo, filtrar_graves=False):
     
     chroma_vals = np.sum(chroma, axis=1)
     
-    # Perfis Krumhansl-Schmuckler
-    major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-    minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+    major_profile = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 5.0, 2.0, 3.5, 1.5, 4.0]
+    minor_profile = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 5.0, 3.5, 2.0, 1.5, 4.0]
     
     notas = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     correlacoes = []
@@ -58,15 +57,28 @@ def baixar_audio_youtube(url):
         'format': 'bestaudio/best',
         'outtmpl': 'temp_yt.%(ext)s',
         'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}],
-        'quiet': True
+        'quiet': True,
+        'nocheckcertificate': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
+        }
     }
+    
     try:
-        if os.path.exists("temp_yt.mp3"): os.remove("temp_yt.mp3")
+        if os.path.exists("temp_yt.mp3"): 
+            os.remove("temp_yt.mp3")
+            
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             return "temp_yt.mp3"
+            
     except Exception as e:
-        st.error(f"Erro: {e}")
+        st.error(f"Erro no download (YouTube bloqueou): {e}")
         return None
 
 # --- 3. INTERFACE ---
